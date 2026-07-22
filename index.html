@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revision Monitor — MD Anaesthesiology</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080d11; --panel:#0e161c; --panel2:#121d24; --line:#1d2b34;
+  --ink:#e8f2f4; --muted:#7b939f; --dim:#546874;
+  --p1:#4ade80; --p2:#22d3ee; --p3:#fbbf24; --p4:#fb7185;
+  --tS:#ef4444; --tA:#f59e0b; --tB:#06b6d4;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:15px; line-height:1.5;
+  padding-bottom:64px;
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+:focus-visible{outline:2px solid var(--p2); outline-offset:2px; border-radius:4px}
+
+/* ---------- MONITOR HEADER ---------- */
+.monitor{
+  position:sticky; top:0; z-index:50;
+  background:linear-gradient(180deg,#0b1318 0%,#0a1116 100%);
+  border-bottom:1px solid var(--line);
+  box-shadow:0 6px 22px rgba(0,0,0,.55);
+}
+.mon-top{display:flex;align-items:center;gap:10px;padding:9px 14px 6px}
+.mon-id{font-family:'IBM Plex Sans Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.10em;color:var(--ink);text-transform:uppercase;min-width:0;display:flex;flex-direction:column;gap:1px}
+.mon-id b{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mon-by{font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:400;letter-spacing:.04em;color:var(--muted);text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mon-overall{margin-left:auto;display:flex;align-items:baseline;gap:5px;flex-shrink:0}
+.mon-overall .big{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:27px;line-height:1;color:var(--p1);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.mon-overall .unit{font-size:12px;color:var(--dim);font-weight:600}
+
+/* ECG trace signature */
+.trace{height:34px;width:100%;display:block}
+.trace path{fill:none;stroke:var(--p1);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;
+  filter:drop-shadow(0 0 4px rgba(74,222,128,.5))}
+.trace .sweep{stroke:var(--p1);opacity:.85}
+@media (prefers-reduced-motion:no-preference){
+  .trace .sweep{stroke-dasharray:1400;stroke-dashoffset:1400;animation:sweep 4.5s linear infinite}
+  @keyframes sweep{to{stroke-dashoffset:0}}
+}
+
+/* channels */
+.channels{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.ch{background:#0c141a;padding:7px 6px 8px;min-width:0}
+.ch-lab{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;color:var(--dim);text-transform:uppercase;display:flex;justify-content:space-between;gap:3px;white-space:nowrap;overflow:hidden}
+.ch-val{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums}
+.ch.prio{background:#101a17;box-shadow:inset 0 0 0 1px rgba(239,68,68,.18)}
+.ch-bar{height:3px;border-radius:2px;background:#1b2830;margin-top:5px;overflow:hidden}
+.ch-fill{height:100%;border-radius:2px;transition:width .45s cubic-bezier(.4,0,.2,1)}
+@media (prefers-reduced-motion:reduce){.ch-fill{transition:none}}
+
+/* ---------- TABS ---------- */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex:0 0 auto;padding:7px 13px;border-radius:20px;font-size:12.5px;font-weight:600;
+  color:var(--muted);border:1px solid var(--line);background:#0c141a;white-space:nowrap;
+  transition:color .15s,border-color .15s,background .15s;
+}
+.tab[aria-selected="true"]{color:#07110d;background:var(--tabc,var(--p1));border-color:var(--tabc,var(--p1))}
+
+/* ---------- SEARCH ---------- */
+.toolbar{display:flex;gap:8px;padding:11px 12px 4px;align-items:center}
+.search{
+  flex:1;background:#0c141a;border:1px solid var(--line);border-radius:10px;
+  padding:9px 12px;color:var(--ink);font-size:14px;font-family:inherit;min-width:0;
+}
+.search::placeholder{color:var(--dim)}
+.btn-ghost{
+  padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:#0c141a;
+  color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap;
+}
+.btn-ghost:hover{color:var(--ink);border-color:#2b3d48}
+
+/* ---------- CONTENT ---------- */
+.wrap{padding:8px 12px 0;max-width:960px;margin:0 auto}
+.grp{margin:14px 0 18px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+.grp-head{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--panel2);border-bottom:1px solid var(--line)}
+.grp-key{
+  font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;
+  width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:#0a0f13;
+}
+.grp-meta{flex:1;min-width:0}
+.grp-title{font-family:'IBM Plex Sans Condensed',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:.01em;line-height:1.25}
+.grp-note{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45}
+.grp-count{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--dim);flex-shrink:0;font-variant-numeric:tabular-nums}
+
+.rule{padding:9px 13px;font-size:11.5px;color:var(--muted);background:#0a1218;border-bottom:1px solid var(--line);line-height:1.5}
+.rule b{color:var(--ink)}
+
+/* rows */
+.row{display:flex;gap:10px;padding:10px 13px;border-bottom:1px solid #16222a;align-items:flex-start}
+.row:last-child{border-bottom:none}
+.row.done{background:rgba(74,222,128,.045)}
+.row.mid{background:rgba(251,191,36,.04)}
+
+.tick{
+  flex-shrink:0;width:26px;height:26px;border-radius:8px;border:1.5px solid #2a3b46;
+  background:#0b1216;display:flex;align-items:center;justify-content:center;margin-top:1px;
+  transition:border-color .15s,background .15s;position:relative;
+}
+.tick:hover{border-color:#3b5262}
+.tick::after{content:"";position:absolute;inset:-9px} /* 44px thumb target */
+.tick svg{width:15px;height:15px;display:none}
+.tick .half{width:9px;height:9px;border-radius:2px;display:none}
+.tick[data-s="1"]{border-color:var(--tA)}
+.tick[data-s="1"] .half{display:block;background:var(--tA)}
+.tick[data-s="2"]{border-color:var(--p1);background:rgba(74,222,128,.16)}
+.tick[data-s="2"] svg{display:block;stroke:var(--p1)}
+
+.rbody{flex:1;min-width:0}
+.rtext{font-size:13.5px;line-height:1.45;font-weight:500}
+.row.done .rtext{color:var(--muted)}
+.rmeta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:5px}
+.pill{
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:500;letter-spacing:.03em;
+  padding:2px 6px;border-radius:5px;border:1px solid;background:transparent;
+}
+.hook{font-size:11px;color:var(--muted);line-height:1.45;margin-top:3px}
+.state-lab{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--dim);letter-spacing:.05em;flex-shrink:0;margin-top:4px;width:52px;text-align:right}
+
+.empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13.5px}
+.empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:6px;font-family:'IBM Plex Sans Condensed',sans-serif}
+
+/* ---------- LAB ---------- */
+.lab-hero{border:1px solid #24404a;border-radius:14px;padding:15px 15px 13px;margin:14px 0;
+  background:linear-gradient(135deg,#0d1c22,#101a24)}
+.lab-hero h2{font-family:'IBM Plex Sans Condensed',sans-serif;font-size:19px;letter-spacing:.01em;
+  background:linear-gradient(90deg,var(--p2),var(--p1));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lab-hero p{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.55}
+.lab-form{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.lab-form input,.lab-form select,.lab-form textarea{
+  background:#0a1216;border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+  color:var(--ink);font-family:inherit;font-size:13.5px;width:100%}
+.lab-form textarea{resize:vertical;min-height:44px}
+.lab-form input::placeholder,.lab-form textarea::placeholder{color:var(--dim)}
+.lab-row2{display:flex;gap:8px}
+.lab-row2 select{flex:1}
+.btn-go{background:var(--p2);color:#04191d;font-weight:700;font-size:13.5px;padding:10px 14px;border-radius:9px;flex-shrink:0}
+.btn-go:disabled{opacity:.4}
+.lab-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn-mail{background:#16323a;color:var(--p2);border:1px solid #245862;font-weight:600;font-size:12px;padding:9px 13px;border-radius:9px}
+.chk{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);padding:2px 0}
+.chk input{width:16px;height:16px;accent-color:var(--p2);flex-shrink:0}
+.lab-note{font-size:10.5px;color:var(--dim);line-height:1.5;margin-top:8px;border-left:2px solid #26414b;padding-left:9px}
+.del{color:var(--dim);font-size:16px;line-height:1;padding:4px 7px;border-radius:6px;flex-shrink:0}
+.del:hover{color:var(--tS);background:rgba(239,68,68,.1)}
+.by{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--dim);letter-spacing:.03em}
+
+/* legend + footer */
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:10px 13px;font-size:11px;color:var(--muted);align-items:center}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{width:11px;height:11px;border-radius:4px;border:1.5px solid #2a3b46;flex-shrink:0}
+.foot{padding:20px 14px 30px;text-align:center;color:var(--dim);font-size:11px;line-height:1.6;max-width:600px;margin:0 auto}
+.save-note{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;background:#12222a;border:1px solid var(--line);
+  color:var(--muted);font-size:11.5px;padding:7px 14px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:80;
+  font-family:'IBM Plex Mono',monospace}
+.save-note.show{opacity:1}
+
+@media(min-width:700px){
+  body{font-size:15px}
+  .rtext{font-size:14px}
+  .mon-overall .big{font-size:32px}
+  .ch-val{font-size:20px}
+}
+</style>
+</head>
+<body>
+
+<header class="monitor">
+  <div class="mon-top">
+    <div class="mon-id"><b>REVISION MONITOR</b><span class="mon-by">MD Anaesthesiology &middot; curated by Jungio</span></div>
+    <div class="mon-overall"><span class="big mono" id="overallPct">0</span><span class="unit">%</span></div>
+  </div>
+  <svg class="trace" viewBox="0 0 1400 34" preserveAspectRatio="none" aria-hidden="true">
+    <path class="sweep" id="ecg"></path>
+  </svg>
+  <div class="channels" id="channels"></div>
+</header>
+
+<nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav>
+
+<div class="toolbar">
+  <input class="search" id="search" type="search" placeholder="Search any topic…" aria-label="Search topics">
+  <button class="btn-ghost" id="resetBtn">Reset</button>
+</div>
+
+<div class="legend">
+  <span><i class="dot"></i> Not started</span>
+  <span><i class="dot" style="border-color:#f59e0b"></i> Revised</span>
+  <span><i class="dot" style="border-color:#4ade80;background:rgba(74,222,128,.2)"></i> Confident</span>
+  <span style="color:#546874">Tap a box to cycle</span>
+</div>
+
+<main class="wrap" id="content"></main>
+
+<div class="foot">
+  Progress saves automatically and will be here when you come back.<br>
+  Confident counts full, revised counts half.
+</div>
+<div class="save-note mono" id="saveNote">saved</div>
+
+<script>
+/* ============ DATA ============ */
+const MASTER=[
+ {k:"S",label:"Near-certain — bank these as fixed answers",color:"var(--tS)",items:[
+  ["Capnography & CO2 measurement","'11 '15 '16 '18 '19 '20 '22","P1","Mainstream vs sidestream + full waveform + abnormal traces."],
+  ["MAC & depth of anaesthesia / BIS","'13 '16 '18 '21 '22","P1","Define MAC, factors altering it, then every monitoring modality."],
+  ["O2–Hb dissociation curve / oxygen flux","'13 '15 '18 '21 '22","P1/P2","Draw it. Shifts, P50, clinical relevance — asked as a diagram question."],
+  ["Brachial plexus + a named approach","'13 '14 '15 '17 '19","P1","Anatomy plus one technique with merits and demerits."],
+  ["Difficult airway: assessment & CICV","'15 '18 '19 '20","P1/P4","Algorithm, predictors, can't-intubate-can't-ventilate drill."],
+  ["Oxygen supply: cylinders / PSA / cryogenic","'18 '20 '21 '22","P1","Bourdon gauge, PSA plant, liquid O2 plant."],
+  ["Vaporizers (Tec series, classification)","'19 '20 '21","P1","Classify, describe one in detail; Poynting effect sits alongside."],
+  ["Local anaesthetic MOA / toxicity / additives","'14 '18 '21","P1","MOA, LAST recognition and lipid rescue, effect of additives."],
+  ["Uptake & distribution of inhalational agents","'14 '15 '18","P1","FA/FI curve, factors, second-gas effect, diffusion hypoxia."],
+  ["Neuromuscular transmission / monitoring / reversal","'14 '15 '18 '20","P1","Physiology, train-of-four, sugammadex vs neostigmine."],
+  ["TURP & TURP syndrome","'17 '22","P2","Considerations, irrigating fluids, hyponatraemia, regional vs GA."],
+  ["Severe preeclampsia 180/110 for LSCS","'18 '22","P2/P3","Recurs near-verbatim. MgSO4, airway, neuraxial vs GA."],
+  ["Labour analgesia / walking epidural","'11 '16 '18 '19 '22","P3","Enumerate neuraxial techniques with pros and cons of each."],
+  ["One-lung ventilation / lung isolation","'11 '15 '16","P3/P4","Indications, methods, hypoxia management, DLT vs blocker."],
+  ["Anticoagulation & ASRA neuraxial timing","'15 '19 '21 '22","P2","LMWH and DOAC bridging plus block timing intervals."],
+  ["CPR / ACLS & BLS algorithms","'11 '15 '20 '21","P2/P4","Current guidelines, stable tachycardia algorithm, post-arrest care."],
+  ["Neonate: TEF / CDH + congenital anomalies","'11 '16 '22","P3/P4","Essay territory. Perioperative, postop pain, associated anomalies."],
+  ["Research methodology & biostatistics","'20 '21 '22","P1","Now a fixture. p-value, ANOVA, central tendency, chi-square, blinding."],
+  ["Crystalloids vs colloids","'16 '17 '18","P4","Classic compare-and-contrast stem."],
+  ["Morbid obesity for surgery / LSCS","'18 '21","P2","Physiological changes, airway, drug dosing, positioning."]]},
+ {k:"A",label:"High probability — keep a structured answer ready",color:"var(--tA)",items:[
+  ["Autologous transfusion / blood conservation","'15 '16 '17 '18 '22","P3/P4","Hazards of allogenic, methods of autologous, cell salvage."],
+  ["Diabetes — perioperative management","'14 '16 '17 '18","P2/P4","Pathophysiology, insulin strategy, uncontrolled emergency case."],
+  ["Thyroid: hypo- and hyperthyroid","'18 '21","P2/P3","Lap chole in hypothyroid; subtotal thyroidectomy prep; airway."],
+  ["Pheochromocytoma","'17 '19","P2","Pre-op optimisation, alpha before beta, intraoperative crises."],
+  ["Malignant hyperthermia & dantrolene","'13 '19","P3","Trigger avoidance, dantrolene dosing, EtCO2 as earliest sign."],
+  ["Magnesium sulphate","'13 '21","P2","MOA and therapeutic uses across obstetrics, airway, analgesia."],
+  ["Sepsis / surviving sepsis / extracorporeal therapy","'20 '22","P2/P4","Bundles plus extracorporeal therapy — rising with the ICU drift."],
+  ["ARDS / ARDSnet / permissive hypercapnia","'11 '19 '22","P2","Lung-protective ventilation, prone, driving pressure."],
+  ["COVID-era ventilation & biomarkers","'21 '22","P4","NIV vs invasive, HFNO, inflammatory biomarkers."],
+  ["Ultrasound / POCUS / TEE","'21 '22","P1/P3","Role in practice; TEE for CAD going for bypass."],
+  ["Thromboelastography & coagulation / INR","'21 '22","P1","TEG trace interpretation, coagulation pathway, perioperative INR."],
+  ["OSA & anaesthetic implications","'15 '21","P2","STOP-BANG, perioperative risk, opioid caution."],
+  ["Prone position problems","'14 '15 '17 '18","P1","Physiology, complications, eye and nerve injury."],
+  ["Oculocardiac reflex","'15 '17 '19","P1","Afferent-efferent arc, prevention, management."],
+  ["Embolism: fat / venous air / pulmonary","'15 '19 '21","P3","Pathophysiology, monitoring, management under anaesthesia."],
+  ["Chronic & cancer pain, WHO ladder, PCA","'14 '19 '20","P3/P4","WHO ladder, PCA settings, opioid-induced hyperalgesia."],
+  ["Anaphylaxis under anaesthesia","'16 '20","P3","Grading, immediate management, tryptase, follow-up."],
+  ["PACU discharge criteria & recovery","'18 '20","P2","Aldrete, modified PADSS, monitoring principles."],
+  ["Drug-eluting stent for non-cardiac surgery","'18 '21","P3","Dual antiplatelet timing, bridging, elective delay windows."],
+  ["Anaesthetic circuits — Mapleson & Bain's","'12 '16 '18","P1/P3","Classify, draw, Jackson-Rees modification, rebreathing, Bain's vs closed circuit."],
+  ["Acid-base: metabolic vs respiratory acidosis","'11 '13 '16 '18","P1/P3","Definitions, compensation, management — recurs in several guises."],
+  ["Pulse oximetry — principles & limitations","'13 '15 '22","P1","Beer-Lambert, factors causing error, co-oximetry contrast."],
+  ["Laparoscopic surgery — anaesthetic concerns","'14 '15 '18","P3/P4","Pneumoperitoneum physiology, monitoring, postop complications."],
+  ["Respiratory failure, indications for MV & modes","'15 '11 '22","P3/P4","Causes, intubation criteria, PCV/SIMV/CMV comparisons."],
+  ["Rapid sequence intubation & full stomach","'14","P2","Indications, technique, cricoid debate, modifications."]]},
+ {k:"B",label:"Rotating & topical — one card each is enough",color:"var(--tB)",items:[
+  ["POCD vs postoperative delirium","'22","P4","Newly examined. Define, differentiate, prevent."],
+  ["Erector spinae plane block","'22","P4","New regional block, likely to recur."],
+  ["Simulation in anaesthesia","'22","P4","Education-domain essay, a competency-era favourite."],
+  ["Quality assurance & low-flow anaesthesia","'19 '21","P4","QA methods plus low-flow and closed-circuit."],
+  ["Hypothermia — physiology & intraop management","'22","P2","Effects, prevention, warming strategies."],
+  ["Constrictive pericarditis / transplanted heart","'21 '22","P2/P3","Uncommon cardiac lesion for non-cardiac surgery."],
+  ["Hepatic: obstructive jaundice / cirrhosis / LFTs","'18 '19","P3/P4","Hepatic blood flow, LFT changes, ORIF in a cirrhotic."],
+  ["Weaning from ventilator / COPD on long-term MV","'18 '22","P1/P3","Weaning criteria, spontaneous breathing trial, COPD strategy."],
+  ["Sterilization of airway & endoscopy equipment","'20 '22","P3","Levels of disinfection, Spaulding classification."],
+  ["Robotic surgery / ICP monitoring / chest physio","'21","P3","Positioning, pneumoperitoneum, niche scenarios."],
+  ["TMJ ankylosis / post-burn contracture / cervical spine","'18 '20","P3/P4","Shared airway and awake-fibreoptic theme."],
+  ["Geriatric hip fracture with heart block; sickle cell; HELLP","'15 '18 '19","P3/P4","High-risk comorbidity essays."],
+  ["Post-dural-puncture headache & accidental dural puncture","'12 '14","P1/P4","Aetiopathogenesis, prevention, blood patch."],
+  ["Polytrauma, chest trauma & ATLS","'12","P4","Role of the anaesthesiologist, blunt abdominal injury, current ATLS."],
+  ["Perioperative laryngospasm","'11","P3","Causes, prevention, Larson's point, management ladder."],
+  ["Postoperative shivering","'11","P3","Mechanism, consequences, pharmacological options."],
+  ["DVT prophylaxis before surgery","'14","P2","Risk stratification, mechanical and pharmacological methods."],
+  ["Posterior fossa tumour & sitting position","'14","P2","Venous air embolism risk, positioning, monitoring."],
+  ["Intestinal obstruction & general ICU care","'15","P3","Fluid shifts, aspiration risk, RSI; ICU daily care bundle."],
+  ["Lower limb blocks","'15","P3","Femoral, sciatic, popliteal, ankle — landmarks and indications."],
+  ["Diabetic ketoacidosis for emergency surgery","'11 '14","P3","Resuscitation priorities, when to delay, intraoperative targets."],
+  ["Squint surgery & oculocardiac reflex","'12","P4","Shared paediatric-ophthalmic theme with PONV and OCR."],
+  ["DIC — anaesthetic management","'11","P4","Triggers, lab picture, component therapy."],
+  ["Anaemic patient & alpha blockers; W.T.G. Morton","'13","P1","Odd-but-asked trio from the June 2013 paper."]]}
+];
+
+const PAPERS={
+ P1:{name:"Paper I",color:"var(--p1)",title:"Basic Sciences applied to Anaesthesiology",
+  sub:"Physics · Pharmacology · Physiology · Anatomy · Equipment · Biostatistics",
+  rule:"Attempt any FOUR of five — you get to choose. Since 2020 a research-methodology question is effectively guaranteed.",
+  years:[
+   ["2022",["Null & alternate hypothesis","Blinding, randomization, allocation concealment","Chi-square test","AED vs manual defibrillator","Indications & limitations of PFTs","HFNO","Role of ultrasound in anaesthetic practice","Thromboelastography","Intraoperative blood conservation","Principles of SpO2 monitoring","Venturi mask vs non-rebreathing mask","Laser tube","Poynting effect","Monitoring depth of anaesthesia","Direct oral anticoagulants"]],
+   ["2021",["Methods of analysis & data interpretation; central tendency","Cerebral autoregulation & inhalational agents","Consent — legal & ethical aspects","Oxygen flux; O2–Hb curve shifts","MOA of local anaesthetics & additives","Transdermal drug administration","MAC & depth monitoring","Buffer systems in the body","Classification of vaporizers (one in detail)","Cryogenic liquid O2 plant","Modern integrated anaesthesia workstation","Coagulation pathway & INR","TRALI"]],
+   ["2020",["P-value & clinical research","Methods of data collection (two in detail)","ANOVA","Landmarks for wrist block","Bourdon gauge","Bougie","Pressure systems in the anaesthesia machine","Difficult-airway crash-cart contents","Universal Gas Law","Macintosh laryngoscope","Neuromuscular function","Paediatric vs adult airway","Capnography","'Tec' series vaporizers","Venturi mask"]],
+   ["2019",["Brachial plexus formation & branches; one technique with merits/demerits","Rotameter","Capnography","Cisatracurium","Remifentanil","Ankle block — anatomy, technique, indications, contraindications","ASA classification & significance"]],
+   ["2018",["Physiology of neuromuscular transmission","Rules of safe cylinder use","Problems of prone position","Invasive BP monitoring & arterial cannulation sites","Intrathecal additives for analgesia","Uses of propofol","Uptake & distribution of inhalational agents","Ketamine as an IV agent","Triage in disaster management","Weaning from ventilator","Bispectral index monitoring","Local anaesthetic toxicity","Transport of oxygen in blood","Assessment of difficult airway","Video vs direct laryngoscope"]],
+   ["2017",["Anatomy of larynx & clinical implications","Perivascular 3-in-1 femoral block","Supraclavicular brachial plexus block","Auto-PEEP","TURP syndrome","Oculocardiac reflex","Action potential","Preload & afterload","Pulmonary perfusion & causes of hypoxia","Mucociliary function & surfactant","Blood-brain barrier & placenta","Fresh frozen plasma","Fospropofol","Sugammadex","Etomidate"]],
+   ["2016",["Mapleson A–F circuits; co-axial; Jackson-Rees; rebreathing prevention","Hypernatraemia","Minimum alveolar concentration","Factors affecting coronary blood flow","Anaesthesia machine leak tests","Oxygen analyzer","Monitoring depth of anaesthesia"]],
+   ["2015",["Brachial plexus anatomy with labelled diagram","Succinylcholine","Factors affecting uptake of inhalational agents","FRC, closing volume & capacity","Nitrous oxide","Factors affecting pulse oximetry","Physiological changes of pregnancy","GCS score","Prone position","Oculocardiac reflex","Sidestream capnometer — pros and cons","Reversal agents","Difficult airway algorithm","Coronary circulation & factors","Uses of adrenaline"]],
+   ["2014",["Epidural canal anatomy & post-dural-puncture headache","Hypoxic pulmonary vasoconstriction","Clonidine","Total body water compartments","Brachial plexus anatomy with diagram","Diabetic ketoacidosis","Flow-volume loops (normal & COPD)","Physiological adaptation to anaemia","Opioid receptors","Mixed venous oximetry","NM transmission in myasthenia gravis","Anaesthesia machine safety measures"]],
+   ["2013",["Stellate ganglion block","Brachial plexus block (interscalene)","Intercostal nerve block","Functional cerebral capacity","O2–Hb dissociation curve","Opiate receptors","MAC","Dantrolene sodium","Magnesium sulphate","Hyponatraemia","Metabolic acidosis","Diffusion hypoxia","Anatomy of larynx","Anatomy of trigeminal nerve","Countercurrent mechanism"]],
+   ["2013 · June",["Anaesthetic considerations in an anaemic patient","Role of alpha blockers in anaesthetic practice","William Thomas Green Morton","Pulse oximetry — principles and applications","Metabolic acidosis and its management","Anatomy of larynx and its nerve supply"]]]},
+ P2:{name:"Paper II",color:"var(--p2)",title:"Practice of Anaesthesia & Co-existing Disease",
+  sub:"Preop assessment · Systemic disease · Obstetric · Pharmacology in practice",
+  rule:"Attempt ALL — no escape route. Every sub-question must be written, so breadth matters more than depth here.",
+  years:[
+   ["2022",["TURP anaesthetic considerations","ARDSnet protocol","Physiological effects of hypothermia & intraop management","FRC & closing volume — importance","O2–Hb dissociation curve & clinical relevance","Constrictive pericarditis (30 y) for appendicectomy","Algorithm for stable tachycardia","ASRA guidelines for neuraxial blocks on LMWH","Numeric rating scale for pain"]],
+   ["2021",["Pharmacokinetics & pharmacodynamics of mannitol","Sleep apnoea syndrome & perioperative implications","MOA of magnesium sulphate","Computer-integrated patient-controlled epidural analgesia","Physiological changes in obesity; morbid obese for LSCS","MOA of IABP, indications & contraindications","PK/PD & classification of opioids","Tourniquet release syndrome","Perioperative fasting & fluids in neonates and paediatrics"]],
+   ["2020",["Preanaesthetic check-up for pneumonectomy","Hypotension after subarachnoid block","PACU discharge criteria","Surviving sepsis guidelines","Informed consent","WHO analgesic ladder","BLS algorithm","Suctioning the intubated ICU patient","Medical record keeping"]],
+   ["2019",["Pheochromocytoma — preop preparation & management","Day-care surgery discharge criteria","Low-flow anaesthesia","Difficult airway algorithm","Monitored anaesthesia care","Nerve injury in relation to anaesthesia","Anaesthesia for electroconvulsive therapy","Oculocardiac reflex"]],
+   ["2018",["Preeclampsia 180/110 (37 y) for emergency LSCS","Morbid obese patient for pyelolithotomy","7-month child, MRI spine, lumbosacral meningocele","Hyperthyroid patient for subtotal thyroidectomy","Extradural haematoma GCS 8 with cervical injury for craniotomy","Walking epidural for labour analgesia","PACU monitoring & discharge criteria","Automated external defibrillator","Monitoring during laparoscopic cholecystectomy"]],
+   ["2017",["Micro-laryngeal surgery","TURP in a 70-year-old man","Cervical fracture taken for fixation","Pheochromocytoma — anaesthetic problems","Myasthenia gravis","Prone position","Monitored anaesthesia care","Ventilator-associated pneumonia","Total intravenous anaesthesia"]],
+   ["2016",["Uncontrolled diabetes for emergency appendicectomy","Trans-tracheal ventilation","Inhalationals & hyperventilation on cerebral blood flow","Respiratory system changes during pregnancy","Respiratory acidosis","Anaphylaxis","Lung atelectasis during anaesthesia"]],
+   ["2015",["Obstructive sleep apnoea & anaesthetic implications","1-year 9-kg child for cystic hygroma excision","Caudal block","Respiratory distress after total thyroidectomy","Hyperkalaemia — aetiology, signs, management","Low-flow & closed-system anaesthesia","Basic life support in an adult","Post-extubation pulmonary oedema","Patient on anticoagulant therapy"]],
+   ["2014",["Anaesthetic management of tracheobronchial foreign body in children","Postoperative complications in laparoscopic surgery","Transfusion-related acute lung injury","Problems of anaesthesia in obstructive jaundice","Problems of anaesthesia in chronic obstructive airway disease","Problems of anaesthesia in posterior fossa tumour","DVT prophylaxis before surgery","One-lung ventilation","Rapid sequence intubation"]],
+   ["2011",["Define & classify shock; causes and management of acute haemorrhagic shock","Physiological changes in the pregnant patient","Metabolic acidosis","Hypocalcaemia","Newer analgesic drugs","Central venous cannulation through IJV","Complications of epidural anaesthesia"]]]},
+ P3:{name:"Paper III",color:"var(--p3)",title:"Clinical, Regional & Sub-speciality Anaesthesia",
+  sub:"Complex comorbidity · Regional techniques · Paediatric & neuro · Critical scenarios",
+  rule:"Attempt ALL. This is the richest source of comorbidity-scenario stems — breadth wins again.",
+  years:[
+   ["2022",["Parturient 180/110 for caesarean delivery","Sterilization of bronchoscopes & endoscopes","Post-cardiac-arrest care","Pressure-swing-adsorption oxygen plant","Weaning a COPD patient (50 y) on long-term ventilation","Pulmonary embolism — causes, pathophysiology, management","Paravertebral space anatomy, indications, complications","Neuraxial techniques for labour analgesia","ECG manifestations & management of hyperkalaemia"]],
+   ["2021",["Hypothyroidism features; management for lap cholecystectomy","TEE in haemodynamic monitoring of CAD for bypass","Restrictive lung disease","Drug-eluting stent for laparoscopic cholecystectomy","Transplanted heart for incidental surgery","Intracranial pressure monitoring — indications & complications","Post-traumatic fat embolism","Anaesthetic problems in robotic surgery","Chest physiotherapy techniques"]],
+   ["2020",["22-year-old with post-burn neck contracture","Sterilization of airway equipment","Pain relief in multiple rib fractures","Child with left-sided inguinal hernia","Video laryngoscope","Patient positioning in spine surgeries","Universal precautions in anaesthesia","Preoperative optimization in bronchial asthma","Anaphylaxis management during surgery"]],
+   ["2019",["Anaesthesia & surgery on hepatic blood flow; obstructive jaundice; CBD exploration","Malignant hyperthermia","Labour analgesia","Venous air embolism","Non-invasive ventilation","Pain management in terminal cancer","Neuroprotection in the intensive care unit"]],
+   ["2018",["55-year-old diabetic on 40 units insulin for left modified radical mastectomy","Perioperative complications of total hip replacement","Problems of sickle cell disease during general anaesthesia","Aetiology of perioperative acute renal failure; renal replacement therapy","Drug-eluting stent for surgery under neuraxial anaesthesia","Controlled hypotension during FESS","Bain's circuit vs closed circuit","Dopamine vs dobutamine","Metabolic vs respiratory acidosis"]],
+   ["2017",["Anaesthetic problems of bronchopleural fistula","Autologous blood transfusion — indications & complications","Anaesthetic management for MRI","Crystalloids vs colloids","Nitric oxide vs nitrous oxide","Neuroleptic analgesia vs neurolept anaesthesia","Combined spinal epidural anaesthesia","Flexible fibreoptic laryngoscopy","Supraglottic airway devices"]],
+   ["2016",["2-day-old neonate with congenital diaphragmatic hernia","Anaesthetic management of one-lung ventilation","Proseal LMA vs I-Gel","Anaesthetic management in chronic renal failure","Nitric oxide","Side effects of neuraxial opioids","Cholinergic agent poisoning"]],
+   ["2015",["Whole blood transfusion — indications & complications","HELLP syndrome — diagnosis & anaesthetic concerns","Geriatric patient with fracture — anaesthetic concerns","Factors affecting cerebral blood flow","Air embolism in neurosurgery","Severe mitral stenosis for inguinal hernia repair","General care of patients in the ICU","Anaesthetic concerns in intestinal obstruction","Lower limb blocks"]],
+   ["2014",["Preanaesthetic evaluation of ischaemic heart disease for non-cardiac surgery","Problems with a huge thyroid swelling of 10 years","Complex regional pain syndrome","Management of PONV","Airway assessment","Proseal LMA","Thiopentone vs methohexitone","Bupivacaine vs ropivacaine","Depolarizing vs non-depolarizing block"]],
+   ["2011",["Prevention & management of hypoxaemia during one-lung ventilation","Hyponatraemia","Latest guidelines on CPR","Venturi principle and its applications in anaesthesia","Uses of capnography","Anaesthetic concerns for microlaryngeal laser surgery","Perioperative management of diabetic ketoacidosis for emergency surgery","Causes and management of perioperative laryngospasm","Anaesthesia depth monitor","Postoperative shivering","Co-oximetry and its usefulness"]]]},
+ P4:{name:"Paper IV",color:"var(--p4)",title:"Long Essays & Recent Advances",
+  sub:"50-mark essays · Compare and contrast · Critical care & evidence",
+  rule:"Three essays, attempt any TWO. The one paper where you CAN dodge — so prepare selective depth on your four strongest stems.",
+  years:[
+   ["2022",["Neonate for TEF repair — perioperative management","Postoperative pain relief strategies in neonatal TEF repair","Congenital anomalies associated with TEF","POCD — definition, agent effects, prevention, vs delirium","Erector spinae plane block","Role & significance of biomarkers in COVID-19","Role of simulation in anaesthesia practice","Role of extracorporeal therapy in sepsis"]],
+   ["2021",["Quality assurance in anaesthesia; monitoring & evaluation; low-flow anaesthesia","Pain assessment in children; postop pain after bilateral knee replacement; opioid-induced hyperalgesia","Pressure-volume curves & flow-volume loops","Current ACC/AHA guidelines of CPR","Non-invasive & invasive ventilatory support in critically ill COVID-19"]],
+   ["2020",["Anaesthetic management of temporomandibular joint ankylosis","'Can't intubate, can't ventilate'","Indications for central line insertion","Pregnancy-induced hypertension and its management","RAE tube and its uses","Caudal block in the paediatric population","Halothane versus sevoflurane"]],
+   ["2019",["70-year-old with fracture hip and complete heart block — perioperative management","Transdermal drug administration","Low molecular weight heparin","Permissive hypercapnia","Universal precautions for handling HIV infection","Patient-controlled analgesia","Nitric oxide","Pathophysiology of pulmonary oedema","Supine hypotension syndrome","Adjuvants in spinal anaesthesia"]],
+   ["2018",["Technologies for CO2 measurement; mainstream vs sidestream; capnography waveform in detail","Hazards of allogenic transfusion; autologous transfusion and its methods","Liver function tests; cirrhosis pathophysiology; 55-year-old cirrhotic for ORIF proximal humerus"]],
+   ["2017",["Pathophysiology of diabetes mellitus & anaesthetic management","Autonomic nervous system — clinical importance with sympathetic & parasympathetic drugs","Different cardiac dysrhythmias & their management under anaesthesia"]],
+   ["2016",["Role of the anaesthesiologist in perioperative pain; pain relief after upper abdominal surgery","Crystalloids versus colloids","Desflurane versus sevoflurane","Walking epidural","Management of ventricular tachycardia in the ICU","Failed intubation","Neuraxial non-opioid analgesic adjuvants"]],
+   ["2011",["Anaesthetic problems, management & postoperative complications in a newborn with TEF","Double-lumen endotracheal tube vs single-lumen ETT","Dopamine vs dobutamine","SIMV mode vs CMV mode of ventilation","Intrathecal analgesia","Failed intubation drill","Anaesthetic management of DIC","Role of PEEP in ARDS"]],
+   ["2012",["Classify anaesthetic circuits, describe functions, advantages & disadvantages of each","Methods of analgesia during labour; lumbar epidural analgesia in detail with merits, demerits & newer advances","Role of the anaesthesiologist in polytrauma; chest trauma and blunt abdominal injury; the new ATLS scheme","Anaesthetic concerns for squint surgery","Monitoring adequacy of oxygenation in arterial blood","Management of dural puncture during epidural block and post-spinal headache"]],
+   ["2015 · June",["Indications for lung isolation; methods of lung isolation; managing hypoxia during one-lung ventilation","Anaesthesia concerns during laparoscopic surgery","Causes of respiratory failure; indications for intubation and mechanical ventilation","PCV mode of ventilation"]]]}
+};
+
+/* ============ STATE ============ */
+const KEY='anaesth-revision-v1';
+const LKEY='anaesth-lab-v1';
+const NKEY='anaesth-name-v1';
+const OWNER='nonglenthungjungio@gmail.com';
+let state={}; let LAB=[]; let POOL=[]; let myName='';
+let ALL=[];
+
+function buildIndex(){
+  ALL=[];
+  MASTER.forEach(t=>t.items.forEach((it,i)=>ALL.push({
+    id:`m-${t.k}-${i}`,text:it[0],years:it[1],paper:it[2],hook:it[3],tab:'master',group:t.k
+  })));
+  Object.keys(PAPERS).forEach(pk=>PAPERS[pk].years.forEach(([yr,qs])=>qs.forEach((q,i)=>ALL.push({
+    id:`${pk}-${yr}-${i}`,text:q,years:yr,paper:pk,hook:'',tab:pk,group:yr
+  }))));
+  LAB.forEach(e=>ALL.push({id:e.id,text:e.text,years:'mine',paper:e.tag,hook:e.note||'',tab:'lab',group:'mine'}));
+}
+
+async function load(){
+  try{ state=JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){ state={}; }
+  try{ LAB=JSON.parse(localStorage.getItem(LKEY)||'[]'); }catch(e){ LAB=[]; }
+  try{ myName=localStorage.getItem(NKEY)||''; }catch(e){ myName=''; }
+  buildIndex();
+}
+async function loadPool(){
+  POOL=[]; // Shared board disabled on GitHub Pages without a backend.
+}
+async function saveLab(){
+  localStorage.setItem(LKEY,JSON.stringify(LAB));
+}catch(e){}
+}
+let saveTimer=null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    localStorage.setItem(KEY,JSON.stringify(state));
+    toast('saved');
+  },400);
+}
+function toast(msg){
+  const n=document.getElementById('saveNote'); n.textContent=msg; n.classList.add('show');
+  clearTimeout(n._t); n._t=setTimeout(()=>n.classList.remove('show'),1400);
+}
+const st=id=>state[id]||0;
+
+/* ============ PROGRESS ============ */
+function pct(list){
+  if(!list.length) return 0;
+  const s=list.reduce((a,x)=>a+(st(x.id)===2?1:st(x.id)===1?.5:0),0);
+  return Math.round(s/list.length*100);
+}
+function renderMonitor(){
+  document.getElementById('overallPct').textContent=pct(ALL);
+  const ch=document.getElementById('channels');
+  if(!ch.children.length){
+    ch.innerHTML=`<div class="ch prio"><div class="ch-lab"><span>Tier S</span><span id="c-S-n"></span></div>
+        <div class="ch-val" id="c-S" style="color:var(--tS)">0%</div>
+        <div class="ch-bar"><div class="ch-fill" id="f-S" style="background:var(--tS);width:0%"></div></div></div>`
+      + Object.keys(PAPERS).map(pk=>{
+      const p=PAPERS[pk];
+      return `<div class="ch"><div class="ch-lab"><span>${p.name.replace('Paper ','P')}</span><span id="c-${pk}-n"></span></div>
+        <div class="ch-val" id="c-${pk}" style="color:${p.color}">0%</div>
+        <div class="ch-bar"><div class="ch-fill" id="f-${pk}" style="background:${p.color};width:0%"></div></div></div>`;
+    }).join('');
+  }
+  const sList=ALL.filter(x=>x.group==='S'&&x.tab==='master'), sv=pct(sList);
+  document.getElementById('c-S').textContent=sv+'%';
+  document.getElementById('f-S').style.width=sv+'%';
+  document.getElementById('c-S-n').textContent=sList.filter(x=>st(x.id)===2).length+'/'+sList.length;
+  Object.keys(PAPERS).forEach(pk=>{
+    const l=ALL.filter(x=>x.tab===pk), v=pct(l);
+    document.getElementById('c-'+pk).textContent=v+'%';
+    document.getElementById('f-'+pk).style.width=v+'%';
+    document.getElementById('c-'+pk+'-n').textContent=l.filter(x=>st(x.id)===2).length+'/'+l.length;
+  });
+  drawECG(pct(ALL));
+}
+function drawECG(p){
+  // one full beat per 100px; amplitude of the R wave grows with progress
+  const w=1400,mid=17,amp=3+ (p/100)*11;
+  let d='M0,'+mid;
+  for(let x=0;x<w;x+=100){
+    d+=` L${x+30},${mid} q6,-${amp*0.28} 10,0 L${x+46},${mid} L${x+50},${mid+amp*0.35} L${x+55},${mid-amp} L${x+60},${mid+amp*0.5} L${x+65},${mid} L${x+78},${mid} q8,-${amp*0.42} 14,0 L${x+100},${mid}`;
+  }
+  document.getElementById('ecg').setAttribute('d',d);
+}
+
+/* ============ RENDER ============ */
+let tab='master', q='';
+const TABS=[{id:'master',label:'Master list',color:'var(--tS)'},
+  ...Object.keys(PAPERS).map(k=>({id:k,label:PAPERS[k].name,color:PAPERS[k].color})),
+  {id:'lab',label:"Jungio's Lab",color:'var(--p2)'}];
+
+function renderTabs(){
+  document.getElementById('tabs').innerHTML=TABS.map(t=>
+    `<button class="tab" role="tab" aria-selected="${t.id===tab}" data-tab="${t.id}" style="--tabc:${t.color}">${t.label}</button>`).join('');
+}
+
+function rowHTML(it,accent){
+  const s=st(it.id);
+  const cls=s===2?'row done':s===1?'row mid':'row';
+  const lab=s===2?'CONFIDENT':s===1?'REVISED':'';
+  return `<div class="${cls}" data-row="${it.id}">
+    <button class="tick" data-s="${s}" data-id="${it.id}" role="checkbox" aria-checked="${s===2}"
+      aria-label="${esc(it.text)} — ${s===2?'confident':s===1?'revised':'not started'}">
+      <span class="half"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </button>
+    <div class="rbody">
+      <div class="rtext">${esc(it.text)}</div>
+      ${it.hook?`<div class="hook">${esc(it.hook)}</div>`:''}
+      <div class="rmeta">
+        ${it.tab==='master'?`<span class="pill" style="color:${accent};border-color:${accent}55">${it.paper}</span>
+        <span class="pill" style="color:var(--dim);border-color:#25353f">${it.years}</span>`:''}
+      </div>
+    </div>
+    <div class="state-lab">${lab}</div>
+  </div>`;
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function labRowHTML(it){
+  const s=st(it.id);
+  const cls=s===2?'row done':s===1?'row mid':'row';
+  const lab=s===2?'CONFIDENT':s===1?'REVISED':'';
+  return `<div class="${cls}" data-row="${it.id}">
+    <button class="tick" data-s="${s}" data-id="${it.id}" role="checkbox" aria-checked="${s===2}"
+      aria-label="${esc(it.text)} — ${s===2?'confident':s===1?'revised':'not started'}">
+      <span class="half"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </button>
+    <div class="rbody">
+      <div class="rtext">${esc(it.text)}</div>
+      ${it.hook?`<div class="hook">${esc(it.hook)}</div>`:''}
+      <div class="rmeta"><span class="pill" style="color:var(--p2);border-color:#245862">${esc(it.paper)}</span></div>
+    </div>
+    <div class="state-lab">${lab}</div>
+    <button class="del" data-del="${it.id}" aria-label="Delete this entry">&times;</button>
+  </div>`;
+}
+
+function wireLab(){
+  const add=document.getElementById('labAdd');
+  if(!add) return;
+  add.addEventListener('click',async()=>{
+    const ti=document.getElementById('labText');
+    const t=ti.value.trim();
+    if(!t){ti.focus();return;}
+    const note=document.getElementById('labNote').value.trim();
+    const tag=document.getElementById('labTag').value;
+    const share=document.getElementById('labShare').checked;
+    const nm=document.getElementById('labName').value.trim();
+    if(nm!==myName){ myName=nm; localStorage.setItem(NKEY,myName); }
+    const id='lab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    LAB.push({id,text:t,note,tag,at:Date.now()});
+    await saveLab(); buildIndex();
+    if(share){
+      try{
+        toast('Shared board requires a backend (Firebase/Supabase). Entry saved locally.');
+      }catch(e){ toast('added — board unavailable'); }
+    } else toast('entry added');
+    render();
+  });
+  document.getElementById('poolBtn').addEventListener('click',async()=>{
+    toast('Shared board unavailable in local version');
+  });
+  document.getElementById('mailBtn').addEventListener('click',()=>{
+    if(!LAB.length){toast('no entries yet');return;}
+    const body=LAB.map((e,i)=>`${i+1}. [${e.tag}] ${e.text}${e.note?'\n   note: '+e.note:''}`).join('\n\n');
+    const subj=`Jungio's Lab entries${myName?' from '+myName:''} (${LAB.length})`;
+    window.location.href=`mailto:${OWNER}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
+  });
+}
+
+function render(){
+  renderTabs(); renderMonitor();
+  const c=document.getElementById('content');
+  const term=q.trim().toLowerCase();
+  const match=x=>!term||x.text.toLowerCase().includes(term)||(x.hook&&x.hook.toLowerCase().includes(term));
+  let html='', hits=0;
+
+  if(tab==='master'){
+    MASTER.forEach(t=>{
+      const items=ALL.filter(x=>x.tab==='master'&&x.group===t.k&&match(x));
+      if(!items.length) return;
+      hits+=items.length;
+      const all=ALL.filter(x=>x.tab==='master'&&x.group===t.k);
+      html+=`<section class="grp">
+        <div class="grp-head">
+          <div class="grp-key" style="background:${t.color}">${t.k}</div>
+          <div class="grp-meta"><div class="grp-title">${t.label}</div>
+            <div class="grp-note" data-note="master|${t.k}">${all.filter(x=>st(x.id)===2).length} of ${all.length} confident · ${pct(all)}% complete</div></div>
+        </div>
+        ${items.map(i=>rowHTML(i,t.color)).join('')}
+      </section>`;
+    });
+  } else if(PAPERS[tab]){
+    const p=PAPERS[tab];
+    const all=ALL.filter(x=>x.tab===tab);
+    html+=`<section class="grp">
+      <div class="grp-head">
+        <div class="grp-key" style="background:${p.color}">${p.name.replace('Paper ','')}</div>
+        <div class="grp-meta"><div class="grp-title">${p.title}</div><div class="grp-note">${p.sub}</div></div>
+        <div class="grp-count" data-count="${tab}|ALL">${pct(all)}%</div>
+      </div>
+      <div class="rule"><b>Format.</b> ${p.rule}</div>
+    </section>`;
+    p.years.forEach(([yr])=>{
+      const items=ALL.filter(x=>x.tab===tab&&x.group===yr&&match(x));
+      if(!items.length) return;
+      hits+=items.length;
+      const all2=ALL.filter(x=>x.tab===tab&&x.group===yr);
+      html+=`<section class="grp">
+        <div class="grp-head">
+          <div class="grp-key" style="background:${p.color}">${yr.slice(2)}</div>
+          <div class="grp-meta"><div class="grp-title">${yr}</div>
+            <div class="grp-note" data-note="${tab}|${yr}">${all2.filter(x=>st(x.id)===2).length} of ${all2.length} confident</div></div>
+          <div class="grp-count" data-count="${tab}|${yr}">${pct(all2)}%</div>
+        </div>
+        ${items.map(i=>rowHTML(i,p.color)).join('')}
+      </section>`;
+    });
+  }
+  if(tab==='lab'){
+    const mine=ALL.filter(x=>x.tab==='lab'&&match(x));
+    hits+=mine.length||1;
+    html+=`<div class="lab-hero">
+      <h2>Jungio's Lab</h2>
+      <p>Your own bench. Add any topic a senior flags, anything you got wrong in a mock, or a stem this list doesn't cover yet. Lab entries tick and count exactly like the rest.</p>
+      <div class="lab-form">
+        <input id="labText" placeholder="Topic or question…" maxlength="200" aria-label="Topic or question">
+        <textarea id="labNote" placeholder="Note to self (optional)" maxlength="300" aria-label="Note"></textarea>
+        <div class="lab-row2">
+          <select id="labTag" aria-label="Which paper">
+            <option value="P1">Paper I</option><option value="P2">Paper II</option>
+            <option value="P3">Paper III</option><option value="P4">Paper IV</option>
+            <option value="—">Unsorted</option>
+          </select>
+          <button class="btn-go" id="labAdd">Add entry</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="labShare"> Also post to the shared board</label>
+        <input id="labName" placeholder="Your name (shown on shared entries)" maxlength="40" value="${esc(myName)}" aria-label="Your name">
+      </div>
+      <div class="lab-actions">
+        <button class="btn-mail" id="mailBtn">Email my entries to Jungio</button>
+        <button class="btn-mail" id="poolBtn">Refresh shared board</button>
+      </div>
+      <div class="lab-note">Your ticks and your entries are private to you — everyone who opens this gets their own. Only entries you explicitly post to the shared board are visible to other people. The email button opens your own mail app with the entries filled in, addressed to ${OWNER}.</div>
+    </div>`;
+
+    html+=`<section class="grp">
+      <div class="grp-head">
+        <div class="grp-key" style="background:var(--p2)">L</div>
+        <div class="grp-meta"><div class="grp-title">My entries</div>
+          <div class="grp-note" data-note="lab|mine">${mine.filter(x=>st(x.id)===2).length} of ${ALL.filter(x=>x.tab==='lab').length} confident</div></div>
+        <div class="grp-count" data-count="lab|mine">${pct(ALL.filter(x=>x.tab==='lab'))}%</div>
+      </div>
+      ${mine.length?mine.map(i=>labRowHTML(i)).join(''):'<div class="empty"><b>No entries yet</b>Add the first thing you keep forgetting.</div>'}
+    </section>`;
+
+    html+=`<section class="grp">
+      <div class="grp-head">
+        <div class="grp-key" style="background:#334155;color:#cbd5e1">∑</div>
+        <div class="grp-meta"><div class="grp-title">Shared board</div>
+          <div class="grp-note">${POOL.length} entr${POOL.length===1?'y':'ies'} posted by everyone using this</div></div>
+      </div>
+      ${POOL.length?POOL.map(p=>`<div class="row"><div class="rbody">
+          <div class="rtext">${esc(p.text)}</div>
+          ${p.note?`<div class="hook">${esc(p.note)}</div>`:''}
+          <div class="rmeta"><span class="pill" style="color:var(--p2);border-color:#245862">${esc(p.tag||'—')}</span>
+          <span class="by">${esc(p.by||'anonymous')}</span></div>
+        </div></div>`).join('')
+        :'<div class="empty"><b>Board is empty</b>Tick “Also post to the shared board” when you add an entry.</div>'}
+    </section>`;
+    c.innerHTML=html; wireLab(); return;
+  }
+  if(!hits) html=`<div class="empty"><b>Nothing matches &ldquo;${esc(q)}&rdquo;</b>Try a shorter word — airway, epidural, capno.</div>`;
+  c.innerHTML=html;
+}
+
+/* ============ EVENTS ============ */
+document.getElementById('tabs').addEventListener('click',e=>{
+  const b=e.target.closest('[data-tab]'); if(!b)return;
+  tab=b.dataset.tab; window.scrollTo({top:0,behavior:'instant'}); render();
+});
+function refreshCounters(){
+  document.querySelectorAll('[data-note]').forEach(el=>{
+    const [tb,gp]=el.dataset.note.split('|');
+    const l=ALL.filter(x=>x.tab===tb&&x.group===gp);
+    const c=l.filter(x=>st(x.id)===2).length;
+    el.textContent = tb==='master'
+      ? `${c} of ${l.length} confident · ${pct(l)}% complete`
+      : `${c} of ${l.length} confident`;
+  });
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    const [tb,gp]=el.dataset.count.split('|');
+    const l=ALL.filter(x=>x.tab===tb&&(gp==='ALL'||x.group===gp));
+    el.textContent=pct(l)+'%';
+  });
+  renderMonitor();
+}
+document.getElementById('content').addEventListener('click',e=>{
+  const d=e.target.closest('[data-del]');
+  if(d){
+    const id=d.dataset.del;
+    if(!confirm('Delete this entry? Your tick for it goes too.'))return;
+    LAB=LAB.filter(x=>x.id!==id); delete state[id];
+    saveLab(); save(); buildIndex(); render(); toast('entry deleted');
+    return;
+  }
+  const b=e.target.closest('.tick'); if(!b)return;
+  const id=b.dataset.id;
+  const s=(st(id)+1)%3;
+  if(s) state[id]=s; else delete state[id];
+  save();
+  // update this row in place — keeps focus, scroll and DOM identity
+  const row=b.closest('.row');
+  row.className = s===2?'row done':s===1?'row mid':'row';
+  b.dataset.s=s;
+  b.setAttribute('aria-checked', s===2);
+  const item=ALL.find(x=>x.id===id);
+  b.setAttribute('aria-label',`${item.text} — ${s===2?'confident':s===1?'revised':'not started'}`);
+  row.querySelector('.state-lab').textContent = s===2?'CONFIDENT':s===1?'REVISED':'';
+  refreshCounters();
+});
+document.getElementById('search').addEventListener('input',e=>{q=e.target.value;render()});
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(!confirm('Clear all progress? This cannot be undone.'))return;
+  state={}; save(); render(); toast('progress cleared');
+});
+
+(async()=>{ await load(); render(); await loadPool(); if(tab==='lab') render(); })();
+</script>
+</body>
+</html>
